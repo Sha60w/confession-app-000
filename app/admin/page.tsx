@@ -117,43 +117,67 @@ export default function AdminPage() {
         </button>
       </div>
 
-      {confessions.map((confession) => (
-        <div key={confession.id} className="border p-4 mb-4 rounded">
-          <textarea
-            className="w-full p-2 border mb-3"
-            value={editedTexts[confession.id] || ""}
-            onChange={(e) =>
-              setEditedTexts({
-                ...editedTexts,
-                [confession.id]: e.target.value,
-              })
-            }
-          />
+      {confessions.map((confession) => {
+        const previewText = editedTexts[confession.id] || "";
+        const imageUrl = `/api/generate-image?text=${encodeURIComponent(
+          previewText
+        )}`;
 
-          <div className="flex gap-3">
-            <button
-              onClick={() => saveEdit(confession)}
-              className="bg-blue-600 text-white px-4 py-1 rounded"
-            >
-              Save
-            </button>
+        return (
+          <div
+            key={confession.id}
+            className="border p-4 mb-6 rounded shadow-md"
+          >
+            <textarea
+              className="w-full p-2 border mb-3"
+              value={previewText}
+              onChange={(e) =>
+                setEditedTexts({
+                  ...editedTexts,
+                  [confession.id]: e.target.value,
+                })
+              }
+            />
 
-            <button
-              onClick={() => approveConfession(confession)}
-              className="bg-green-600 text-white px-4 py-1 rounded"
-            >
-              Approve
-            </button>
+            <div className="flex gap-3 mb-4">
+              <button
+                onClick={() => saveEdit(confession)}
+                className="bg-blue-600 text-white px-4 py-1 rounded"
+              >
+                Save
+              </button>
 
-            <button
-              onClick={() => rejectConfession(confession)}
-              className="bg-red-600 text-white px-4 py-1 rounded"
-            >
-              Reject
-            </button>
+              <button
+                onClick={() => approveConfession(confession)}
+                className="bg-green-600 text-white px-4 py-1 rounded"
+              >
+                Approve
+              </button>
+
+              <button
+                onClick={() => rejectConfession(confession)}
+                className="bg-red-600 text-white px-4 py-1 rounded"
+              >
+                Reject
+              </button>
+            </div>
+
+            {/* 🔥 LIVE IMAGE PREVIEW */}
+            <div className="flex justify-center">
+              <img
+                src={imageUrl}
+                alt="Generated Preview"
+                className="rounded-lg shadow-lg border"
+                style={{
+                  width: "270px", // 1080/4
+                  height: "338px", // 1350/4
+                  objectFit: "cover",
+                }}
+              />
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
