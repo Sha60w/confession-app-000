@@ -119,7 +119,7 @@ export default function AdminPage() {
 
       {confessions.map((confession) => {
         const previewText = editedTexts[confession.id] || "";
-        const imageUrl = `/api/generate-image?text=${encodeURIComponent(
+        const imageUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/generate-image?text=${encodeURIComponent(
           previewText
         )}`;
 
