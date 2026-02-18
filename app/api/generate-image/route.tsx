@@ -1,11 +1,10 @@
 import { ImageResponse } from "@vercel/og";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 const WIDTH = 1080;
 const HEIGHT = 1350;
 
-// 🔥 Smart font sizing based on text length
 function getFontSize(text: string) {
   const length = text.length;
   if (length < 180) return 64;
@@ -19,35 +18,17 @@ function getFontSize(text: string) {
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const text = searchParams.get("text") || "Anonymous Confession";
+
+    const text =
+      searchParams.get("text") || "Anonymous Confession";
+
+    // 🔒 Use ONLY passed background
+    const background =
+      searchParams.get("bg") || "default.jpg";
+
     const fontSize = getFontSize(text);
 
-    // 🔥 Fetch backgrounds from GitHub dynamically
-    const githubApiUrl =
-      "https://api.github.com/repos/Sha60w/confession-app-000/contents/public/backgrounds";
-
-    const headers: Record<string, string> = {};
-    if (process.env.GITHUB_TOKEN) {
-      headers.Authorization = `token ${process.env.GITHUB_TOKEN}`;
-    }
-
-    const res = await fetch(githubApiUrl, { headers });
-    if (!res.ok) {
-      throw new Error(`GitHub API error: ${res.status} ${res.statusText}`);
-    }
-
-    const files = await res.json();
-
-    // Filter only image files and get their raw download URLs
-    const images = files
-      .filter((file: any) => /\.(jpg|jpeg|png|webp)$/i.test(file.name))
-      .map((file: any) => file.download_url);
-
-    if (images.length === 0) {
-      throw new Error("No background images found on GitHub");
-    }
-
-    const randomBg = images[Math.floor(Math.random() * images.length)];
+    const bgUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/backgrounds/${background}`;
 
     return new ImageResponse(
       (
@@ -63,7 +44,7 @@ export async function GET(request: Request) {
         >
           {/* Background */}
           <img
-            src={randomBg}
+            src={bgUrl}
             style={{
               position: "absolute",
               width: "100%",
@@ -79,7 +60,8 @@ export async function GET(request: Request) {
               flexDirection: "column",
               justifyContent: "center",
               alignItems: "center",
-              padding: text.length > 700 ? "50px" : "80px",
+              padding:
+                text.length > 700 ? "50px" : "80px",
               maxWidth: "850px",
               textAlign: "center",
               position: "relative",
@@ -92,6 +74,7 @@ export async function GET(request: Request) {
                 fontWeight: 800,
                 lineHeight: 1.5,
                 textAlign: "center",
+                fontFamily: "Georgia, serif",
               }}
             >
               {text}
@@ -99,9 +82,14 @@ export async function GET(request: Request) {
           </div>
         </div>
       ),
-      { width: WIDTH, height: HEIGHT }
+      {
+        width: WIDTH,
+        height: HEIGHT,
+      }
     );
   } catch (err: any) {
-    return new Response("Error: " + err.message, { status: 500 });
+    return new Response("Error: " + err.message, {
+      status: 500,
+    });
   }
 }

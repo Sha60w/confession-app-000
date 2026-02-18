@@ -19,9 +19,18 @@ type Confession = {
   text: string;
 };
 
+const backgrounds = [
+  "/backgrounds/bg1.jpg",
+  "/backgrounds/bg2.jpg",
+  "/backgrounds/bg3.jpg",
+];
+
 export default function AdminPage() {
   const [confessions, setConfessions] = useState<Confession[]>([]);
   const [editedTexts, setEditedTexts] = useState<{ [key: string]: string }>({});
+  const [selectedBackgrounds, setSelectedBackgrounds] = useState<{
+    [key: string]: string;
+  }>({});
   const [authorized, setAuthorized] = useState(false);
   const router = useRouter();
 
@@ -48,11 +57,15 @@ export default function AdminPage() {
     setConfessions(data);
 
     const initialTexts: { [key: string]: string } = {};
+    const initialBackgrounds: { [key: string]: string } = {};
+
     data.forEach((c) => {
       initialTexts[c.id] = c.text;
+      initialBackgrounds[c.id] = backgrounds[0];
     });
 
     setEditedTexts(initialTexts);
+    setSelectedBackgrounds(initialBackgrounds);
   };
 
   useEffect(() => {
@@ -61,11 +74,23 @@ export default function AdminPage() {
     }
   }, [authorized]);
 
+  const changeBackground = (id: string) => {
+    const currentBg = selectedBackgrounds[id];
+    const currentIndex = backgrounds.indexOf(currentBg);
+    const nextIndex = (currentIndex + 1) % backgrounds.length;
+
+    setSelectedBackgrounds({
+      ...selectedBackgrounds,
+      [id]: backgrounds[nextIndex],
+    });
+  };
+
   const saveEdit = async (confession: Confession) => {
     const newText = editedTexts[confession.id];
 
     await updateDoc(doc(db, "confessions", confession.id), {
       text: newText,
+      background: selectedBackgrounds[confession.id],
       edited: true,
       editedAt: Timestamp.now(),
     });
@@ -78,6 +103,7 @@ export default function AdminPage() {
 
     await addDoc(collection(db, "approvedConfessions"), {
       text: finalText,
+      background: selectedBackgrounds[confession.id],
       approvedAt: Timestamp.now(),
       scheduledAt: null,
       posted: false,
@@ -119,9 +145,11 @@ export default function AdminPage() {
 
       {confessions.map((confession) => {
         const previewText = editedTexts[confession.id] || "";
+        const selectedBg = selectedBackgrounds[confession.id];
+
         const imageUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/api/generate-image?text=${encodeURIComponent(
           previewText
-        )}`;
+        )}&background=${encodeURIComponent(selectedBg)}`;
 
         return (
           <div
@@ -139,7 +167,7 @@ export default function AdminPage() {
               }
             />
 
-            <div className="flex gap-3 mb-4">
+            <div className="flex gap-3 mb-4 flex-wrap">
               <button
                 onClick={() => saveEdit(confession)}
                 className="bg-blue-600 text-white px-4 py-1 rounded"
@@ -160,17 +188,24 @@ export default function AdminPage() {
               >
                 Reject
               </button>
+
+              <button
+                onClick={() => changeBackground(confession.id)}
+                className="bg-purple-600 text-white px-4 py-1 rounded"
+              >
+                Change Background
+              </button>
             </div>
 
-            {/* 🔥 LIVE IMAGE PREVIEW */}
+            {/* LIVE IMAGE PREVIEW */}
             <div className="flex justify-center">
               <img
                 src={imageUrl}
                 alt="Generated Preview"
                 className="rounded-lg shadow-lg border"
                 style={{
-                  width: "270px", // 1080/4
-                  height: "338px", // 1350/4
+                  width: "270px",
+                  height: "338px",
                   objectFit: "cover",
                 }}
               />
