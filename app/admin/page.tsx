@@ -70,6 +70,12 @@ export default function AdminPage() {
     fetchBackgrounds();
   }, []);
 
+  const getRandomBackground = () => {
+    if (backgrounds.length === 0) return "";
+    const index = Math.floor(Math.random() * backgrounds.length);
+    return backgrounds[index];
+  };
+
   const fetchConfessions = async () => {
     const snapshot = await getDocs(collection(db, "confessions"));
 
@@ -85,7 +91,7 @@ export default function AdminPage() {
 
     data.forEach((c) => {
       initialTexts[c.id] = c.text;
-      initialBackgrounds[c.id] = backgrounds[0] || "";
+      initialBackgrounds[c.id] = getRandomBackground();
     });
 
     setEditedTexts(initialTexts);
@@ -97,6 +103,13 @@ export default function AdminPage() {
       fetchConfessions();
     }
   }, [authorized, backgrounds]);
+
+  const changeBackground = (id: string) => {
+    setSelectedBackgrounds({
+      ...selectedBackgrounds,
+      [id]: getRandomBackground(),
+    });
+  };
 
   const saveEdit = async (confession: Confession) => {
     const newText = editedTexts[confession.id];
@@ -116,7 +129,7 @@ export default function AdminPage() {
 
     await addDoc(collection(db, "approvedConfessions"), {
       text: finalText,
-      background: background, // 🔥 Save FULL URL
+      background: background,
       approvedAt: Timestamp.now(),
       scheduledAt: null,
       posted: false,
@@ -159,11 +172,11 @@ export default function AdminPage() {
         const previewText = editedTexts[confession.id] || "";
         const selectedBg = selectedBackgrounds[confession.id];
 
-        const imageUrl = selectedBg
-          ? `${process.env.NEXT_PUBLIC_BASE_URL}/api/generate-image?text=${encodeURIComponent(
-              previewText
-            )}&bg=${encodeURIComponent(selectedBg)}`
-          : "";
+        const imageUrl =
+          selectedBg &&
+          `${process.env.NEXT_PUBLIC_BASE_URL}/api/generate-image?text=${encodeURIComponent(
+            previewText
+          )}&bg=${encodeURIComponent(selectedBg)}`;
 
         return (
           <div
@@ -171,7 +184,7 @@ export default function AdminPage() {
             className="border p-4 mb-10 rounded shadow-md"
           >
             <textarea
-              className="w-full p-2 border mb-3"
+              className="w-full p-2 border mb-4"
               value={previewText}
               onChange={(e) =>
                 setEditedTexts({
@@ -181,25 +194,14 @@ export default function AdminPage() {
               }
             />
 
-            {/* 🔥 BACKGROUND SELECTOR */}
-            <div className="grid grid-cols-4 gap-3 mb-4">
-              {backgrounds.map((bg) => (
-                <img
-                  key={bg}
-                  src={bg}
-                  onClick={() =>
-                    setSelectedBackgrounds({
-                      ...selectedBackgrounds,
-                      [confession.id]: bg,
-                    })
-                  }
-                  className={`cursor-pointer h-20 object-cover border ${
-                    selectedBg === bg
-                      ? "border-blue-600 border-4"
-                      : "border-gray-300"
-                  }`}
-                />
-              ))}
+            {/* 🔥 CHANGE BACKGROUND BUTTON */}
+            <div className="mb-4">
+              <button
+                onClick={() => changeBackground(confession.id)}
+                className="bg-purple-600 text-white px-4 py-1 rounded"
+              >
+                Change Background
+              </button>
             </div>
 
             <div className="flex gap-3 mb-4">
