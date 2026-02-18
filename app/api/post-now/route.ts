@@ -4,9 +4,12 @@ import {
   collection,
   query,
   where,
+  orderBy,
+  limit,
   getDocs,
   updateDoc,
   doc,
+  Timestamp,
 } from "firebase/firestore";
 
 const IG_USER_ID = process.env.INSTAGRAM_USER_ID!;
@@ -52,45 +55,53 @@ async function postToInstagram(imageUrl: string, caption: string) {
 
 export async function GET() {
   try {
-    // 1️⃣ Get first unposted approved confession
+    // 🔥 Get oldest approved & unposted confession
     const q = query(
       collection(db, "approvedConfessions"),
-      where("posted", "==", false)
+      where("posted", "==", false),
+      orderBy("approvedAt", "asc"),
+      limit(1)
     );
 
     const snapshot = await getDocs(q);
 
     if (snapshot.empty) {
       return NextResponse.json({
-        message: "No approved posts pending.",
+        message: "No posts available.",
       });
     }
 
     const postDoc = snapshot.docs[0];
     const postData = postDoc.data();
 
+    if (!postData.background) {
+      throw new Error("Missing background URL");
+    }
+
     const text = postData.text;
-    const background = postData.background || "default.jpg";
+    const background = postData.background;
 
     const imageUrl = `${BASE_URL}/api/generate-image?text=${encodeURIComponent(
       text
-    )}&bg=${background}`;
+    )}&bg=${encodeURIComponent(background)}`;
 
-    // 2️⃣ Post to Instagram
-    const result = await postToInstagram(
-      imageUrl,
-      text
-    );
+    // 🔥 Post to Instagram
+    const igResult = await postToInstagram(imageUrl, text);
 
-    // 3️⃣ Mark as posted
+    if (!igResult.id) {
+      throw new Error(JSON.stringify(igResult));
+    }
+
+    // 🔥 Mark as posted
     await updateDoc(doc(db, "approvedConfessions", postDoc.id), {
       posted: true,
-      postedAt: new Date(),
+      postedAt: Timestamp.now(),
+      instagramPostId: igResult.id,
     });
 
     return NextResponse.json({
       success: true,
-      instagramResponse: result,
+      instagramPostId: igResult.id,
     });
   } catch (error: any) {
     return NextResponse.json(
