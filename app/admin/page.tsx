@@ -1,23 +1,52 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
 import {
   collection,
+  getDocs,
+  deleteDoc,
+  doc,
   addDoc,
+  updateDoc,
   Timestamp,
 } from "firebase/firestore";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { useRouter } from "next/navigation";
 
-const GITHUB_USERNAME = "Sha60w";
+type Confession = {
+  id: string;
+  text: string;
+};
+
+const GITHUB_USERNAME = "sha60w";
 const GITHUB_REPO = "confession-app-000";
 const BACKGROUND_FOLDER = "/public/backgrounds";
 
 export default function AdminPage() {
-  const [text, setText] = useState("");
+  const [confessions, setConfessions] = useState<Confession[]>([]);
+  const [editedTexts, setEditedTexts] = useState<{ [key: string]: string }>({});
+  const [selectedBackgrounds, setSelectedBackgrounds] = useState<{
+    [key: string]: string;
+  }>({});
   const [backgrounds, setBackgrounds] = useState<string[]>([]);
-  const [selectedBg, setSelectedBg] = useState<string | null>(null);
+  const [authorized, setAuthorized] = useState(false);
+  const router = useRouter();
 
-  // Fetch backgrounds from GitHub
+  // 🔐 AUTH
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        router.push("/login");
+      } else {
+        setAuthorized(true);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [router]);
+
+  // 🔥 Fetch GitHub backgrounds
   useEffect(() => {
     async function fetchBackgrounds() {
       const res = await fetch(
@@ -36,125 +65,184 @@ export default function AdminPage() {
         );
 
       setBackgrounds(images);
-
-      if (images.length > 0) {
-        setSelectedBg(images[0]);
-      }
     }
 
     fetchBackgrounds();
   }, []);
 
-  const handleApprove = async () => {
-    if (!text || !selectedBg) return;
+  const fetchConfessions = async () => {
+    const snapshot = await getDocs(collection(db, "confessions"));
+
+    const data: Confession[] = snapshot.docs.map((docItem) => ({
+      id: docItem.id,
+      ...(docItem.data() as Omit<Confession, "id">),
+    }));
+
+    setConfessions(data);
+
+    const initialTexts: { [key: string]: string } = {};
+    const initialBackgrounds: { [key: string]: string } = {};
+
+    data.forEach((c) => {
+      initialTexts[c.id] = c.text;
+      initialBackgrounds[c.id] = backgrounds[0] || "";
+    });
+
+    setEditedTexts(initialTexts);
+    setSelectedBackgrounds(initialBackgrounds);
+  };
+
+  useEffect(() => {
+    if (authorized && backgrounds.length > 0) {
+      fetchConfessions();
+    }
+  }, [authorized, backgrounds]);
+
+  const saveEdit = async (confession: Confession) => {
+    const newText = editedTexts[confession.id];
+
+    await updateDoc(doc(db, "confessions", confession.id), {
+      text: newText,
+      edited: true,
+      editedAt: Timestamp.now(),
+    });
+
+    fetchConfessions();
+  };
+
+  const approveConfession = async (confession: Confession) => {
+    const finalText = editedTexts[confession.id];
+    const background = selectedBackgrounds[confession.id];
 
     await addDoc(collection(db, "approvedConfessions"), {
-      text,
-      background: selectedBg, // FULL URL saved
+      text: finalText,
+      background: background, // 🔥 Save FULL URL
       approvedAt: Timestamp.now(),
+      scheduledAt: null,
       posted: false,
     });
 
-    alert("Confession Approved ✅");
-    setText("");
+    await deleteDoc(doc(db, "confessions", confession.id));
+
+    fetchConfessions();
   };
 
-  const previewUrl = selectedBg
-    ? `/api/generate-image?text=${encodeURIComponent(
-        text
-      )}&bg=${encodeURIComponent(selectedBg)}`
-    : "";
+  const rejectConfession = async (confession: Confession) => {
+    const finalText = editedTexts[confession.id];
+
+    await addDoc(collection(db, "rejectedConfessions"), {
+      text: finalText,
+      rejectedAt: Timestamp.now(),
+    });
+
+    await deleteDoc(doc(db, "confessions", confession.id));
+
+    fetchConfessions();
+  };
+
+  if (!authorized) return null;
 
   return (
-    <div
-      style={{
-        background: "white",
-        minHeight: "100vh",
-        padding: "40px",
-      }}
-    >
-      <h1 style={{ fontSize: "28px", fontWeight: "bold" }}>
-        Admin Dashboard
-      </h1>
+    <div className="min-h-screen p-8 bg-white text-black">
+      <div className="flex justify-between mb-6">
+        <h1 className="text-2xl font-bold">Admin Dashboard</h1>
 
-      {/* Text Input */}
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="Edit confession here..."
-        style={{
-          width: "100%",
-          height: "150px",
-          marginTop: "20px",
-          padding: "15px",
-          fontSize: "16px",
-        }}
-      />
-
-      {/* Background Selector */}
-      <h2 style={{ marginTop: "30px" }}>
-        Select Background
-      </h2>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns:
-            "repeat(auto-fill, minmax(150px, 1fr))",
-          gap: "15px",
-          marginTop: "15px",
-        }}
-      >
-        {backgrounds.map((bg) => (
-          <img
-            key={bg}
-            src={bg}
-            onClick={() => setSelectedBg(bg)}
-            style={{
-              width: "100%",
-              height: "150px",
-              objectFit: "cover",
-              cursor: "pointer",
-              border:
-                selectedBg === bg
-                  ? "4px solid blue"
-                  : "2px solid transparent",
-            }}
-          />
-        ))}
+        <button
+          onClick={() => signOut(auth)}
+          className="bg-black text-white px-4 py-1 rounded"
+        >
+          Logout
+        </button>
       </div>
 
-      {/* Preview */}
-      <h2 style={{ marginTop: "40px" }}>
-        Preview
-      </h2>
+      {confessions.map((confession) => {
+        const previewText = editedTexts[confession.id] || "";
+        const selectedBg = selectedBackgrounds[confession.id];
 
-      {previewUrl && (
-        <img
-          src={previewUrl}
-          style={{
-            width: "300px",
-            marginTop: "20px",
-            border: "1px solid #ddd",
-          }}
-        />
-      )}
+        const imageUrl = selectedBg
+          ? `${process.env.NEXT_PUBLIC_BASE_URL}/api/generate-image?text=${encodeURIComponent(
+              previewText
+            )}&bg=${encodeURIComponent(selectedBg)}`
+          : "";
 
-      {/* Approve Button */}
-      <button
-        onClick={handleApprove}
-        style={{
-          marginTop: "30px",
-          padding: "12px 20px",
-          fontSize: "16px",
-          background: "black",
-          color: "white",
-          border: "none",
-          cursor: "pointer",
-        }}
-      >
-        Approve Confession
-      </button>
+        return (
+          <div
+            key={confession.id}
+            className="border p-4 mb-10 rounded shadow-md"
+          >
+            <textarea
+              className="w-full p-2 border mb-3"
+              value={previewText}
+              onChange={(e) =>
+                setEditedTexts({
+                  ...editedTexts,
+                  [confession.id]: e.target.value,
+                })
+              }
+            />
+
+            {/* 🔥 BACKGROUND SELECTOR */}
+            <div className="grid grid-cols-4 gap-3 mb-4">
+              {backgrounds.map((bg) => (
+                <img
+                  key={bg}
+                  src={bg}
+                  onClick={() =>
+                    setSelectedBackgrounds({
+                      ...selectedBackgrounds,
+                      [confession.id]: bg,
+                    })
+                  }
+                  className={`cursor-pointer h-20 object-cover border ${
+                    selectedBg === bg
+                      ? "border-blue-600 border-4"
+                      : "border-gray-300"
+                  }`}
+                />
+              ))}
+            </div>
+
+            <div className="flex gap-3 mb-4">
+              <button
+                onClick={() => saveEdit(confession)}
+                className="bg-blue-600 text-white px-4 py-1 rounded"
+              >
+                Save
+              </button>
+
+              <button
+                onClick={() => approveConfession(confession)}
+                className="bg-green-600 text-white px-4 py-1 rounded"
+              >
+                Approve
+              </button>
+
+              <button
+                onClick={() => rejectConfession(confession)}
+                className="bg-red-600 text-white px-4 py-1 rounded"
+              >
+                Reject
+              </button>
+            </div>
+
+            {/* 🔥 LIVE PREVIEW */}
+            {imageUrl && (
+              <div className="flex justify-center">
+                <img
+                  src={imageUrl}
+                  alt="Generated Preview"
+                  className="rounded-lg shadow-lg border"
+                  style={{
+                    width: "270px",
+                    height: "338px",
+                    objectFit: "cover",
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
