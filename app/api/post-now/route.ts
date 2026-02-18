@@ -6,7 +6,7 @@ const ACCESS_TOKEN = process.env.INSTAGRAM_ACCESS_TOKEN!;
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL!;
 
 async function postToInstagram(imageUrl: string, caption: string) {
-  // 1️⃣ Create container
+  // 1️⃣ Create media container
   const containerRes = await fetch(
     `https://graph.facebook.com/v18.0/${IG_USER_ID}/media`,
     {
@@ -26,14 +26,37 @@ async function postToInstagram(imageUrl: string, caption: string) {
     throw new Error(JSON.stringify(containerData));
   }
 
-  // 2️⃣ Publish post
+  const creationId = containerData.id;
+
+  // 2️⃣ Wait for media to be ready
+  let status = "IN_PROGRESS";
+  let attempts = 0;
+
+  while (status === "IN_PROGRESS" && attempts < 10) {
+    await new Promise((resolve) => setTimeout(resolve, 3000)); // wait 3 sec
+
+    const statusRes = await fetch(
+      `https://graph.facebook.com/v18.0/${creationId}?fields=status_code&access_token=${ACCESS_TOKEN}`
+    );
+
+    const statusData = await statusRes.json();
+
+    status = statusData.status_code;
+    attempts++;
+  }
+
+  if (status !== "FINISHED") {
+    throw new Error("Media processing failed or timed out.");
+  }
+
+  // 3️⃣ Publish
   const publishRes = await fetch(
     `https://graph.facebook.com/v18.0/${IG_USER_ID}/media_publish`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        creation_id: containerData.id,
+        creation_id: creationId,
         access_token: ACCESS_TOKEN,
       }),
     }
@@ -41,6 +64,7 @@ async function postToInstagram(imageUrl: string, caption: string) {
 
   return publishRes.json();
 }
+
 
 export async function GET() {
   try {
