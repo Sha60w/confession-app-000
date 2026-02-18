@@ -1,23 +1,12 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/firebase";
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  limit,
-  getDocs,
-  updateDoc,
-  doc,
-  Timestamp,
-} from "firebase/firestore";
+import { adminDb } from "@/lib/firebase-admin";
 
 const IG_USER_ID = process.env.INSTAGRAM_USER_ID!;
 const ACCESS_TOKEN = process.env.INSTAGRAM_ACCESS_TOKEN!;
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL!;
 
 async function postToInstagram(imageUrl: string, caption: string) {
-  // 1️⃣ Create media container
+  // 1️⃣ Create container
   const containerRes = await fetch(
     `https://graph.facebook.com/v18.0/${IG_USER_ID}/media`,
     {
@@ -37,7 +26,7 @@ async function postToInstagram(imageUrl: string, caption: string) {
     throw new Error(JSON.stringify(containerData));
   }
 
-  // 2️⃣ Publish media
+  // 2️⃣ Publish post
   const publishRes = await fetch(
     `https://graph.facebook.com/v18.0/${IG_USER_ID}/media_publish`,
     {
@@ -55,20 +44,16 @@ async function postToInstagram(imageUrl: string, caption: string) {
 
 export async function GET() {
   try {
-    // 🔥 Get oldest approved & unposted confession
-    const q = query(
-      collection(db, "approvedConfessions"),
-      where("posted", "==", false),
-      orderBy("approvedAt", "asc"),
-      limit(1)
-    );
-
-    const snapshot = await getDocs(q);
+    // 🔥 Get oldest approved & not posted
+    const snapshot = await adminDb
+      .collection("approvedConfessions")
+      .where("posted", "==", false)
+      .orderBy("approvedAt", "asc")
+      .limit(1)
+      .get();
 
     if (snapshot.empty) {
-      return NextResponse.json({
-        message: "No posts available.",
-      });
+      return NextResponse.json({ message: "No posts available." });
     }
 
     const postDoc = snapshot.docs[0];
@@ -93,11 +78,14 @@ export async function GET() {
     }
 
     // 🔥 Mark as posted
-    await updateDoc(doc(db, "approvedConfessions", postDoc.id), {
-      posted: true,
-      postedAt: Timestamp.now(),
-      instagramPostId: igResult.id,
-    });
+    await adminDb
+      .collection("approvedConfessions")
+      .doc(postDoc.id)
+      .update({
+        posted: true,
+        postedAt: new Date(),
+        instagramPostId: igResult.id,
+      });
 
     return NextResponse.json({
       success: true,
