@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 type Confession = {
   id: string;
   text: string;
+  createdAt: Timestamp;
 };
 
 const GITHUB_USERNAME = "sha60w";
@@ -130,8 +131,8 @@ export default function AdminPage() {
     await addDoc(collection(db, "approvedConfessions"), {
       text: finalText,
       background: background,
+      createdAt: confession.createdAt,
       approvedAt: Timestamp.now(),
-      scheduledAt: null,
       posted: false,
     });
 
@@ -205,21 +206,21 @@ export default function AdminPage() {
             </div>
 
             <div className="flex gap-3 mb-4">
-              <button
+              <button  // save button
                 onClick={() => saveEdit(confession)}
                 className="bg-blue-600 text-white px-4 py-1 rounded"
               >
                 Save
               </button>
 
-              <button
+              <button // approve button
                 onClick={() => approveConfession(confession)}
                 className="bg-green-600 text-white px-4 py-1 rounded"
               >
                 Approve
               </button>
 
-              <button
+              <button // reject button
                 onClick={() => rejectConfession(confession)}
                 className="bg-red-600 text-white px-4 py-1 rounded"
               >
